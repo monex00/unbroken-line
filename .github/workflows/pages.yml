@@ -1,0 +1,62 @@
+name: pages
+
+# The browser pages are the only thing published. They are rebuilt from the
+# notebooks on every push, so what runs in Pyodide can never drift from the
+# source: unbroken_line.py (ink on paper) is the site root, and
+# unbroken_line_classic.py (the same notebook, no CSS) lives under /classic/.
+# public/ (paintings, catalog, pictures) is copied next to each page by the
+# export, and the notebooks read it from there.
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Install
+        run: uv sync
+      - name: Test the claim
+        # one line, closed, never crossing itself: checked on grown curves
+        run: uv run pytest -q
+      - name: Guard the notebooks
+        # Runs every cell headless: a broken cell fails here, not in the browser.
+        run: |
+          uv run python -c "import unbroken_line; unbroken_line.app.run()"
+          uv run python -c "import unbroken_line_classic; unbroken_line_classic.app.run()"
+      - name: Export the pages
+        # --no-sandbox: the notebooks have inline PEP 723 deps, and without it
+        # marimo stops to ask whether to use a sandboxed venv.
+        run: |
+          uv run marimo export html-wasm unbroken_line.py -o site/ --mode run --no-sandbox
+          uv run marimo export html-wasm unbroken_line_classic.py -o site/classic/ --mode run --no-sandbox
+          rm -f site/*.md site/classic/*.md  # notes marimo leaves for coding agents
+          touch site/.nojekyll
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

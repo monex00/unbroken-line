@@ -1,0 +1,20 @@
+[project]
+name = "unbroken-line"
+version = "0.1.0"
+description = "Paintings drawn by one closed line that grows from a small ring and never crosses itself: differential growth in a reactive marimo notebook"
+requires-python = ">=3.12"
+dependencies = [
+    "marimo>=0.25.0",
+    "matplotlib>=3.11",
+    "numba>=0.62",
+    "numpy>=2.5",
+    "pillow>=11",
+    "scipy>=1.18",
+]
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

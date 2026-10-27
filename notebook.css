@@ -1,0 +1,266 @@
+/* The notebook wears the same clothes as the line it draws:
+   ink on paper, strictly monochrome, Instrument Serif for the voice and
+   IBM Plex Mono for anything that is a label or a number.
+
+     paper  bg #f4f0e8  ink #383b3e      (light theme)
+     night  bg #1d252b  ink #fbfcfc      (dark theme)
+
+   Every in-between tone is a mix of the two, never a third colour.
+
+   Loaded the standard way, marimo.App(css_file=...). Only the three
+   --marimo-*-font variables are public API; the theme variables and class
+   names below are marimo internals (checked against 0.24) and may need a
+   touch-up after an upgrade. */
+
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap");
+
+:root {
+  --paper: #f4f0e8;
+  --ink: #383b3e;
+}
+
+:root.dark,
+.dark,
+[data-theme="dark"] {
+  --paper: #1d252b;
+  --ink: #fbfcfc;
+}
+
+/* .marimo and :host because marimo renders every control in its own shadow
+   root and re-declares its theme there; --paper and --ink still inherit
+   through. */
+:root,
+:root.dark,
+.dark,
+[data-theme="dark"],
+.marimo,
+:host {
+  --ink-70: color-mix(in srgb, var(--ink) 70%, var(--paper));
+  --ink-35: color-mix(in srgb, var(--ink) 35%, var(--paper));
+  --ink-18: color-mix(in srgb, var(--ink) 18%, var(--paper));
+  --ink-07: color-mix(in srgb, var(--ink) 7%, var(--paper));
+
+  --marimo-heading-font: "Instrument Serif", "Iowan Old Style", Georgia, serif;
+  --marimo-text-font: "Instrument Serif", "Iowan Old Style", Georgia, serif;
+  --marimo-monospace-font: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+
+  --background: var(--paper);
+  --foreground: var(--ink);
+  --card: var(--paper);
+  --card-foreground: var(--ink);
+  --popover: var(--paper);
+  --popover-foreground: var(--ink);
+  --muted: var(--ink-07);
+  --muted-foreground: var(--ink-70);
+  --secondary: var(--ink-07);
+  --secondary-foreground: var(--ink);
+  --accent: var(--ink-07);
+  --accent-foreground: var(--ink);
+  --primary: var(--ink);
+  --primary-foreground: var(--paper);
+  --border: var(--ink-18);
+  --input: var(--ink-35);
+  --ring: var(--ink-35);
+  --link: var(--ink);
+  --base-shadow: transparent;
+  --radius: 2px;
+}
+
+body,
+#root,
+#App {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+/* --- prose --------------------------------------------------------------- */
+.markdown,
+.prose {
+  color: var(--ink);
+  font-family: var(--marimo-text-font);
+  font-size: 1.3rem;
+  line-height: 1.42;
+}
+
+.markdown :is(h1, h2, h3),
+.prose :is(h1, h2, h3) {
+  font-family: var(--marimo-heading-font);
+  font-weight: 400;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+  border: 0;
+}
+
+.markdown h1 {
+  font-size: 3.6rem;
+  line-height: 1.02;
+  margin: 1.2rem 0 1.4rem;
+}
+
+.markdown h2 {
+  font-size: 2.3rem;
+  line-height: 1.1;
+  margin: 0.6rem 0 1rem;
+}
+
+.markdown h3 {
+  font-size: 1.6rem;
+  font-style: italic;
+  margin: 0.2rem 0 0.4rem;
+}
+
+.markdown strong {
+  font-weight: 400;
+  font-style: italic;
+}
+
+.markdown a {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-thickness: 0.5px;
+  text-underline-offset: 3px;
+}
+
+/* a hairline between sections */
+.markdown hr {
+  border: 0;
+  border-top: 0.5px solid var(--ink-35);
+  margin: 2.6rem 0 1.6rem;
+}
+
+/* --- anything that is a label or a number: mono ---------------------------- */
+.markdown :is(code, pre, kbd),
+.markdown table,
+label,
+button,
+input,
+select,
+[role="slider"],
+[role="combobox"] {
+  font-family: var(--marimo-monospace-font);
+}
+
+.markdown code {
+  font-size: 0.68em;
+  background: var(--ink-07);
+  color: var(--ink);
+  border: 0;
+  border-radius: 2px;
+  padding: 0.1em 0.35em;
+}
+
+.markdown .codehilite {
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+
+.markdown pre {
+  background: transparent;
+  color: var(--ink);
+  border: 0;
+  border-left: 0.5px solid var(--ink-35);
+  border-radius: 0;
+  padding: 0.2rem 0 0.2rem 1rem;
+  font-size: 0.82rem;
+  line-height: 1.6;
+}
+
+.markdown pre code {
+  background: transparent;
+  padding: 0;
+  font-size: inherit;
+}
+
+.markdown .codehilite span {
+  color: var(--ink);
+}
+
+.markdown table {
+  font-size: 0.8rem;
+  border-collapse: collapse;
+  border: 0;
+}
+
+.markdown :is(th, td) {
+  border: 0;
+  border-bottom: 0.5px solid var(--ink-18);
+  background: transparent;
+  padding: 0.45rem 1.1rem 0.45rem 0;
+  text-align: left !important;
+}
+
+.markdown th {
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.68rem;
+  color: var(--ink-70);
+  border-bottom: 0.5px solid var(--ink);
+}
+
+.markdown tr,
+.markdown tbody tr:nth-child(n) {
+  background: transparent !important;
+}
+
+.markdown td strong {
+  font-style: normal;
+  font-weight: 500;
+}
+
+/* maths keeps its own face, as it does in the pictures */
+.markdown .katex {
+  font-size: 1em;
+  color: var(--ink);
+}
+
+.markdown .katex-display {
+  margin: 1.3rem 0;
+}
+
+/* --- controls -------------------------------------------------------------- */
+label,
+.mo-label,
+:is(label, .mo-label) :is(.markdown, .prose) {
+  font-family: var(--marimo-monospace-font);
+  font-size: 0.74rem;
+  line-height: 1.4;
+  letter-spacing: 0.02em;
+  color: var(--ink-70);
+}
+
+/* the slider is the one control marimo paints with fixed blues instead of the
+   theme: track, filled range, thumb */
+span[data-orientation].bg-slate-200 {
+  background: var(--ink-18) !important;
+  height: 2px !important;
+  overflow: visible;
+}
+
+span[data-orientation].bg-blue-500 {
+  background: var(--ink) !important;
+}
+
+[role="slider"] {
+  background: var(--paper) !important;
+  border-color: var(--ink) !important;
+  box-shadow: none !important;
+}
+
+[role="slider"]:is(:hover, :focus) {
+  background: var(--ink) !important;
+}
+
+/* --- plotly: the modebar is chrome, keep it out of the drawing -------------- */
+.js-plotly-plot .modebar {
+  opacity: 0.35;
+}
+
+.js-plotly-plot .modebar-btn path {
+  fill: var(--ink) !important;
+}
+
+.js-plotly-plot .modebar-group {
+  background: transparent !important;
+}

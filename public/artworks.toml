@@ -1,0 +1,88 @@
+# The paintings. One [[artwork]] per piece; the image is public/art/<slug>.jpg.
+#
+# Every image is a public-domain scan from Wikimedia Commons (`commons`, the
+# file's title there), cut to 4:5 at `crop` ([x0, y0, x1, y1], fractions of
+# the Commons file) and scaled to 1080 px wide (Adam: 895, the size of his
+# crop in the scan).
+#
+# start    : [x, y], fractions of the image: where the ring starts. Put it on
+#            the focal point; the line spreads out from there.
+# palette  : "paper" (dark ink on light) or "night" (light ink on dark, the
+#            strands packed in the lights). Try the other one with
+#            `animate.py <slug> --palette paper|night`.
+# [artwork.growth]
+#          : this piece's changes to the Growth defaults in unbroken_line.py,
+#            same names.
+#
+# Works held by Italian state museums (here: Medusa, Uffizi) fall under the
+# Codice dei beni culturali (art. 107-108): reproducing them for profit needs
+# the museum's permission. Non-commercial use is fine.
+
+[[artwork]]
+slug = "mona-lisa"
+title = "Mona Lisa"
+artist = "Leonardo da Vinci"
+year = "c. 1503-1519"
+where = "Louvre, Paris"
+commons = "Mona Lisa, by Leonardo da Vinci, from C2RMF retouched.jpg"
+crop = [0.0022, 0.0825, 0.9978, 0.9175]
+start = [0.395, 0.174]
+palette = "paper"
+
+[artwork.growth]  # sfumato: more local contrast, a gentler curve
+gamma = 1.3
+local = 1.2
+
+[[artwork]]
+slug = "pearl-earring"
+title = "Girl with a Pearl Earring"
+artist = "Johannes Vermeer"
+year = "c. 1665"
+where = "Mauritshuis, The Hague"
+commons = "1665 Girl with a Pearl Earring.jpg"
+crop = [0.1381, 0.06, 0.9719, 0.94]
+start = [0.392, 0.375]
+palette = "night"
+
+[[artwork]]
+slug = "lady-with-an-ermine"
+title = "Lady with an Ermine"
+artist = "Leonardo da Vinci"
+year = "c. 1489-1491"
+where = "Czartoryski Museum, Krakow"
+commons = "Lady with an Ermine - Leonardo da Vinci - Google Art Project.jpg"
+crop = [0.0128, 0.075, 0.9272, 0.925]
+start = [0.593, 0.194]
+palette = "paper"
+
+[[artwork]]
+slug = "medusa"
+title = "Medusa"
+artist = "Caravaggio"
+year = "1597"
+where = "Uffizi, Florence"
+commons = "Caravaggio - Medusa - Google Art Project.jpg"
+crop = [0.1378, 0.04, 0.8922, 0.96]
+start = [0.493, 0.598]
+palette = "paper"
+
+[artwork.growth]  # snakes and shield are the same dark olive; the shield is
+flatten = 0.9     # plain and the snakes are all scales, so lift the plain
+flatten_size = 1.0  # ground to the light: the snakes read as dark coils
+
+[[artwork]]
+slug = "creation-of-adam"
+title = "The Creation of Adam"
+artist = "Michelangelo"
+year = "c. 1512"
+where = "Sistine Chapel, Vatican City"
+commons = "Michelangelo - Creation of Adam (cropped).jpg"
+crop = [0.273, 0.12, 0.527, 0.82]
+start = [0.48, 0.493]
+palette = "paper"
+
+[artwork.growth]  # a pale fresco: a steep curve, so only the figures go dense
+width = 900       # at 600 the fingers are thinner than r_min and do not read
+gamma = 3.0
+local = 1.5
+clip_light = 95.0
