@@ -62,6 +62,578 @@ with app.setup:
     PACKING = 0.93
 
 
+@app.cell
+def _():
+    import marimo as mo
+    import matplotlib.pyplot as plt
+
+    return mo, plt
+
+
+@app.cell
+def _(mo):
+    # the palette follows the page's theme; on the dark one the ink is light,
+    # so the line must be dense where the picture is LIGHT (Growth.night)
+    PAL = NIGHT if mo.app_meta().theme == "dark" else PAPER
+    night = PAL is NIGHT
+
+    def public_src(name):
+        """A file of public/ for mo.image: a path here, a URL in the browser."""
+        loc = mo.notebook_location() / "public" / name
+        return loc if isinstance(loc, Path) and loc.exists() else str(loc)
+
+    return PAL, night, public_src
+
+
+@app.cell
+def _(mo, public_src):
+    mo.md(rf"""
+    # Unbroken Line
+
+    ### a painting drawn by one line that grows and never crosses itself
+
+    {mo.image(public_src("growth.gif"), width=360, style={"margin": "0 auto"})}
+
+    Take a small ring of thread and let it grow. Every point on it trembles
+    a little, is pulled smooth by its two neighbours, and is pushed away from
+    any other part of the thread that comes too close. The ring gets longer,
+    buckles, folds into a labyrinth and fills the page. It never crosses
+    itself.
+
+    Now read "too close" off a painting: a couple of pixels in the shadows,
+    more in the lights. The thread packs tight where the painting is dark and
+    stays loose where it is bright, and the picture appears in the gaps. From
+    start to finish it is still one closed line.
+
+    $$r(\mathbf x) = r_{{\min}} + (r_{{\max}} - r_{{\min}})\,T(\mathbf x)^{{\gamma}}$$
+
+    The method is the labyrinth growth of H. Pedersen and K. Singh,
+    [*Organic Labyrinths and Mazes*](https://www.dgp.toronto.edu/~karan/artexhibit/mazes.pdf)
+    (NPAR 2006). Try it first: pick a painting and watch it grow. Then the
+    sections below take the method apart one idea at a time. No maths needed
+    beyond "push" and "pull".
+    """)
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""
+    ## Try it
+
+    Pick a painting, or drop in your own picture. Three of them were grown
+    in advance, on a map 600 pixels wide and in the palette they were made
+    for: drag the slider and watch the line fill the frame.
+    """)
+    return
+
+
+@app.cell
+def _(mo):
+    catalog = load_catalog()
+    art = mo.ui.dropdown(
+        options={a["title"]: s for s, a in catalog.items()},
+        value=next(iter(catalog.values()))["title"],
+        label="painting",
+    )
+    upload = mo.ui.file(filetypes=["image/*"], label="or your own picture")
+    mo.hstack([art, upload], justify="start")
+    return art, catalog, upload
+
+
+@app.cell
+def _(art, catalog, upload):
+    # the picture, its credit line, and the start of the ring
+    if upload.value:
+        grey = load_grey(upload.contents())
+        entry = {"title": upload.name(), "start": [0.5, 0.5]}
+        credit = upload.name()
+    else:
+        entry = catalog[art.value]
+        grey = load_image(art.value)
+        credit = f"**{entry['title']}**, {entry['artist']}, {entry['year']}, {entry['where']}"
+    return credit, entry, grey
+
+
+@app.cell
+def _(art, upload):
+    # grown in advance by figures.py; None for your own picture
+    ready = None if upload.value else load_growth(f"growth/{art.value}.npz")
+    return (ready,)
+
+
+@app.cell
+def _(mo, ready):
+    if ready:
+        stage = mo.ui.slider(0, len(ready[0]) - 1, value=len(ready[0]) // 2, label="growth",
+                             full_width=True)
+        _out = stage
+    else:
+        stage = None
+        _out = mo.md("_Nothing grown in advance for this picture: grow it yourself below._")
+    _out
+    return (stage,)
+
+
+@app.cell
+def _(mo, plt, ready, stage):
+    mo.stop(ready is None)
+    _curves, _shape, _g = ready
+    _pal = NIGHT if _g.night else PAPER
+    _P = _curves[stage.value]  # already smoothed for drawing (polish)
+    _fig = plt.figure(figsize=(5.4, 5.4 * _shape[0] / _shape[1]), facecolor=_pal["bg"])
+    draw(_fig.add_axes([0, 0, 1, 1]), _P, _shape, _pal, width=INK * _g.r_min)
+    mo.vstack([
+        _fig,
+        mo.md(f"{len(_P):,} points · line {curve_length(_P):,.0f} px long "
+              f"on a {_shape[1]} px map"),
+    ], align="center")
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""
+    ### Tune the tone
+
+    How close the strands may sit is read off the picture: tight in the
+    darks, loose in the lights (section 7 tells how). Move the sliders and
+    the map changes; the circle is where the ring starts.
+    """)
+    return
+
+
+@app.cell
+def _(entry, mo):
+    _g = params(entry)
+    r_min = mo.ui.slider(1.0, 6.0, step=0.1, value=_g.r_min, label="r min", show_value=True)
+    r_max = mo.ui.slider(4.0, 24.0, step=0.5, value=_g.r_max, label="r max", show_value=True)
+    gamma = mo.ui.slider(0.5, 4.0, step=0.1, value=_g.gamma, label="gamma", show_value=True)
+    local = mo.ui.slider(0.0, 2.0, step=0.1, value=_g.local, label="local contrast", show_value=True)
+    blur = mo.ui.slider(0.0, 3.0, step=0.25, value=_g.blur, label="blur", show_value=True)
+    start_x = mo.ui.slider(0.0, 1.0, step=0.01, value=entry["start"][0], label="start x", show_value=True)
+    start_y = mo.ui.slider(0.0, 1.0, step=0.01, value=entry["start"][1], label="start y", show_value=True)
+    mo.vstack([mo.hstack([r_min, r_max, gamma]), mo.hstack([local, blur]), mo.hstack([start_x, start_y])])
+    return blur, gamma, local, r_max, r_min, start_x, start_y
+
+
+@app.cell
+def _(blur, entry, gamma, grey, local, night, r_max, r_min, width):
+    g = params(
+        entry, width=width.value, r_min=r_min.value, r_max=r_max.value, gamma=gamma.value,
+        local=local.value, blur=blur.value, night=night,
+    )
+    R = spacing_field(grey, g)
+    return R, g
+
+
+@app.cell
+def _(PAL, R, credit, g, grey, mo, night, plt, start_x, start_y):
+    _fig, _ax = plt.subplots(1, 3, figsize=(10, 4.4), facecolor=PAL["bg"])
+    _cmap = ink_cmap(PAL)
+    # every panel as ink coverage, so all three read the same way
+    _ax[0].imshow(grey if night else 1 - grey, cmap=_cmap, vmin=0, vmax=1)
+    _ax[1].imshow((g.r_max - R) / (g.r_max - g.r_min), cmap=_cmap, vmin=0, vmax=1)
+    # the tone the line will make: pen width over strand spacing
+    _ax[2].imshow(np.clip(INK * g.r_min / (PACKING * R), 0, 1), cmap=_cmap, vmin=0, vmax=1)
+    _h, _w = grey.shape
+    _ax[0].plot(start_x.value * _w, start_y.value * _h, "o", ms=7, mfc="none", mec=PAL["ink"], mew=1.2)
+    for _a, _t in zip(_ax, ["picture", "spacing r(x): dark = tight", "the tone the line will make"]):
+        _a.set_title(_t, color=PAL["ink"], fontsize=9)
+        _a.axis("off")
+    _fig.tight_layout()
+    mo.vstack([mo.md(credit + "  · the circle is where the ring starts"), _fig])
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""
+    ### Grow it yourself
+
+    The map above, with your sliders, grown here and now. The width is the
+    size of the map in pixels: the bigger, the finer the line and the longer
+    the wait. On a laptop 350 takes under a minute and 600 a few minutes.
+    """)
+    return
+
+
+@app.cell
+def _(mo):
+    width = mo.ui.slider(100, 1200, step=25, value=350, label="width", show_value=True)
+    steps = mo.ui.slider(500, 10000, step=500, value=6000, label="at most steps", show_value=True)
+    run = mo.ui.run_button(label="grow")
+    # In the browser (Pyodide) there are no compiled kernels and one core:
+    # a whole picture would take the best part of an hour, so growing is
+    # left to the notebook run on a computer.
+    if HAVE_NUMBA:
+        _out = mo.hstack([width, steps, run], justify="start")
+    else:
+        _out = mo.callout(mo.md(
+            "This page runs in your browser, without the compiled code that makes the "
+            "growth fast, so growing a whole picture here would take the best part of "
+            "an hour. Run the notebook on your computer to grow your own: "
+            "`uv run marimo edit unbroken_line.py` in a copy of the "
+            "[repository](https://github.com/monex00/unbroken-line)."), kind="info")
+    _out
+    return run, steps, width
+
+
+@app.cell
+def _(R, g, mo, run, start_x, start_y, steps):
+    mo.stop(not HAVE_NUMBA)
+    mo.stop(not run.value, mo.md("Press **grow**."))
+    with mo.status.progress_bar(total=steps.value, title="growing", remove_on_exit=True) as _bar:
+        snaps = grow(R, g, steps.value, every=50, center=(start_x.value, start_y.value),
+                     on_step=lambda s, P: _bar.update())
+    return (snaps,)
+
+
+@app.cell
+def _(mo, snaps):
+    frame = mo.ui.slider(0, len(snaps) - 1, value=len(snaps) - 1, label="snapshot", show_value=True)
+    frame
+    return (frame,)
+
+
+@app.cell
+def _(PAL, R, frame, g, mo, plt, snaps):
+    _P = snaps[frame.value]
+    _fig = plt.figure(figsize=(5, 5 * R.shape[0] / R.shape[1]), facecolor=PAL["bg"])
+    draw(_fig.add_axes([0, 0, 1, 1]), polish(_P, g), R.shape, PAL, width=INK * g.r_min)
+    mo.vstack([
+        _fig,
+        mo.md(f"{len(_P):,} points · line {curve_length(_P):,.0f} px long on a {g.width} px map"),
+    ])
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""
+    ## How it works
+
+    Seven ideas, one at a time, most with a slider of their own: a line,
+    three nudges that make it grow, a rule that keeps it from crossing, and
+    a painting that tells it where to pack tight.
+    """)
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""
+    ## 1. One line
+
+    The line is nothing but a list of points, $\mathbf p_0, \mathbf p_1,
+    \dots, \mathbf p_{n-1}$, each joined to the next by a straight piece and
+    the last joined back to the first. It is drawn with a pen of one fixed
+    width, in one colour, with no shading. Every grey you will see comes from
+    one thing: how close together its strands run.
+
+    It starts as a small ring of 20 points. Then, over and over, every point
+    takes a step made of three small nudges,
+
+    $$\mathbf p_i \;\leftarrow\; \mathbf p_i + \mathbf B_i + \mathbf F_i + \mathbf A_i$$
+
+    and the line is tidied up: points are added where it has stretched,
+    removed where they bunch up. The next four sections take the three
+    nudges and the tidying one at a time.
+    """)
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""
+    ## 2. Tremble
+
+    The first nudge is pure chance. Every point is kicked a short distance in
+    a random direction:
+
+    $$\mathbf B_i = f_B\, D\, \mathbf z_i, \qquad \mathbf z_i \sim \mathcal N(0, 1)$$
+
+    $D$ is the distance between neighbouring points, so the kick is a small
+    fraction $f_B$ of it (0.1 here). This is the engine. A thread that
+    wobbles is longer than a straight one, and in section 5 that extra length
+    turns into new points. With $f_B = 0$ the ring stays a ring.
+    """)
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""
+    ## 3. Smooth
+
+    The second nudge pulls every point a little way towards the midpoint of
+    its two neighbours:
+
+    $$\mathbf F_i = f_F \left( \tfrac12\,(\mathbf p_{i-1} + \mathbf p_{i+1}) - \mathbf p_i \right)$$
+
+    On its own this would shrink the ring to a dot. Against the trembling it
+    irons out the jitter and keeps the line a curve instead of a scribble. A
+    larger $f_F$ gives smooth, wide meanders; a smaller one a frayed line
+    that grows like coral.
+
+    Where the spacing changes along the line, the midpoint is weighted by the
+    spacing at each neighbour, $(\mathbf p_{i-1} r_{i+1} + \mathbf p_{i+1}
+    r_{i-1}) / (r_{i-1} + r_{i+1})$, so that points do not slide towards the
+    open, light parts of the picture.
+    """)
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""
+    ## 4. Keep your distance
+
+    The third nudge is what makes a labyrinth. Every stretch of the line is
+    pushed away by any other stretch closer than a distance $r$, and pulled,
+    gently, by one a little further off. How hard depends only on the
+    distance $d$ counted in units of $r$, $\rho = d / r$:
+
+    $$w(\rho) = \rho^{-12} - \rho^{-6}$$
+
+    This is the Lennard-Jones curve, the textbook rule for two atoms: a steep
+    wall of push below $\rho = 1$, a shallow dip of pull beyond it, nothing
+    past $\rho = 2$. At $\rho = 1$ push and pull cancel, so two strands side
+    by side settle exactly $r$ apart. Remember that $r$: in section 7 it
+    becomes the brush.
+
+    The distance is measured from a point to the nearest spot on each piece
+    of the line, not to the other points, so a strand feels its neighbour as
+    a smooth wall rather than a row of beads. Two changes to the textbook
+    curve. Closer than $\rho = 0.85$ the push stops growing: the true curve
+    shoots up so fast that a step overshoots and the points rattle. And a
+    point feels only the parts of the line that have folded back towards it
+    (closer in space than 0.9 times their distance along the line), never
+    the stretch it sits on, or a straight line would push on itself.
+    """)
+    return
+
+
+@app.cell
+def _(mo):
+    lj_floor = mo.ui.slider(0.6, 1.0, step=0.01, value=Growth.lj_floor, label="push stops growing at",
+                            show_value=True)
+    lj_floor
+    return (lj_floor,)
+
+
+@app.cell
+def _(PAL, lj_floor, plt):
+    _g = replace(Growth(), lj_floor=lj_floor.value)
+    _rho = np.linspace(0.5, 2.2, 600)
+    _fig, _ax = plt.subplots(figsize=(6.4, 2.8), facecolor=PAL["bg"])
+    _ax.set_facecolor(PAL["bg"])
+    _pure = _rho**-12 - _rho**-6
+    _ax.plot(_rho, _pure, color=PAL["ink"], lw=1, ls=(0, (2, 3)), alpha=0.6)
+    _w = np.where(_rho < _g.cutoff, lennard_jones(_rho, _g), 0.0)
+    _ax.plot(_rho, _w, color=PAL["ink"], lw=1.8)
+    _ax.axhline(0, color=PAL["ink"], lw=0.6, alpha=0.5)
+    _ax.axvline(1, color=PAL["ink"], lw=0.6, alpha=0.3)
+    _ax.set_ylim(-0.4, 2.0)
+    _ax.set_xlim(0.5, 2.2)
+    _ax.text(0.62, 1.75, "push", color=PAL["ink"], fontsize=9)
+    _ax.text(1.35, -0.32, "pull", color=PAL["ink"], fontsize=9)
+    _ax.text(1.02, 1.75, "ρ = 1: strands settle here", color=PAL["ink"], fontsize=8, alpha=0.8)
+    _ax.set_xlabel("ρ = distance / r", color=PAL["ink"], fontsize=9)
+    _ax.tick_params(colors=PAL["ink"], labelsize=8)
+    for _s in ("top", "right"):
+        _ax.spines[_s].set_visible(False)
+    for _s in ("left", "bottom"):
+        _ax.spines[_s].set_color(PAL["ink"])
+    _fig.tight_layout()
+    _fig
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""
+    ## 5. Split and merge
+
+    Points are kept about $D = 0.4\,r$ apart. After every step a piece longer
+    than $1.2\,D$ is cut in two at its middle, and a point closer than
+    $0.2\,D$ to its neighbour is removed.
+
+    Now the loop closes. Trembling makes the line longer; the long pieces
+    split; every new point pushes on its neighbours; the line has nowhere to
+    go but sideways, so it buckles and folds, and each fold is held $r$ from
+    the next by the push and pull of section 4. When the frame is full there
+    is nothing left to buckle into: the count of points stops climbing and
+    the growth stops by itself.
+
+    ### Try it: a ring on blank paper
+
+    The same spacing everywhere, $r = 3$ pixels, on a small square. Change
+    the three nudges and grow: no trembling, no growth; little smoothing, a
+    ragged coral; strong push and pull, a tidy maze.
+    """)
+    return
+
+
+@app.cell
+def _(mo):
+    demo_fb = mo.ui.slider(0.0, 0.3, step=0.01, value=Growth.f_b, label="tremble  f_B", show_value=True)
+    demo_ff = mo.ui.slider(0.01, 0.4, step=0.01, value=Growth.f_f, label="smooth  f_F", show_value=True)
+    demo_fa = mo.ui.slider(0.005, 0.08, step=0.005, value=Growth.f_a, label="push-pull  f_A",
+                           show_value=True)
+    demo_size = mo.ui.slider(50, 160, step=10, value=100 if HAVE_NUMBA else 70, label="square, px",
+                             show_value=True)
+    demo_run = mo.ui.run_button(label="grow")
+    mo.vstack([mo.hstack([demo_fb, demo_ff, demo_fa]), mo.hstack([demo_size, demo_run], justify="start")])
+    return demo_fa, demo_fb, demo_ff, demo_run, demo_size
+
+
+@app.cell
+def _(demo_fa, demo_fb, demo_ff, demo_run, demo_size, mo):
+    mo.stop(not demo_run.value, mo.md("Press **grow**."
+                                      + ("" if HAVE_NUMBA else " In the browser this takes a minute.")))
+    demo_g = Growth(width=demo_size.value, r_min=3.0, r_max=3.0, f_b=demo_fb.value, f_f=demo_ff.value,
+                    f_a=demo_fa.value, max_nodes=60_000)
+    demo_R = np.full((demo_size.value, demo_size.value), 3.0)
+    demo_log = []
+    with mo.status.progress_bar(total=4000, title="growing", remove_on_exit=True) as _bar:
+        demo_snaps = grow(demo_R, demo_g, 4000, every=20, log=demo_log, on_step=lambda s, P: _bar.update())
+    return demo_R, demo_g, demo_log, demo_snaps
+
+
+@app.cell
+def _(demo_snaps, mo):
+    demo_frame = mo.ui.slider(0, len(demo_snaps) - 1, value=len(demo_snaps) - 1, label="snapshot",
+                              show_value=True)
+    demo_frame
+    return (demo_frame,)
+
+
+@app.cell
+def _(PAL, demo_R, demo_frame, demo_g, demo_log, demo_snaps, plt):
+    _P = demo_snaps[demo_frame.value]
+    _fig = plt.figure(figsize=(8.4, 4.0), facecolor=PAL["bg"])
+    _ax = _fig.add_axes([0.0, 0.0, 0.48, 1.0])
+    draw(_ax, polish(_P, demo_g), demo_R.shape, PAL, width=INK * demo_g.r_min)
+    _ax2 = _fig.add_axes([0.58, 0.16, 0.4, 0.74])
+    _s, _n = np.array(demo_log).T
+    _ax2.plot(_s, _n, color=PAL["ink"], lw=1.4)
+    _ax2.axvline(min(demo_frame.value * 20, _s[-1]), color=PAL["ink"], lw=0.6, alpha=0.4)
+    _ax2.set_facecolor(PAL["bg"])
+    _ax2.set_xlabel("step", color=PAL["ink"], fontsize=9)
+    _ax2.set_title("points on the line", color=PAL["ink"], fontsize=9, loc="left")
+    _ax2.tick_params(colors=PAL["ink"], labelsize=8)
+    for _k in ("top", "right"):
+        _ax2.spines[_k].set_visible(False)
+    for _k in ("left", "bottom"):
+        _ax2.spines[_k].set_color(PAL["ink"])
+    _fig
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""
+    ## 6. Never crossing
+
+    The promise in the title is the one thing the original method does not
+    make: the short-range push keeps strands apart nearly always, not always.
+    Here it is kept by construction, three ways.
+
+    - **Short steps.** No point moves further than $r/4$ in one step, nor
+      further than half its shorter neighbouring piece. Deep in a fold a
+      point can feel a dozen walls at once; without the cap it sums all their
+      pushes, jumps over its own neighbours and ties a knot.
+    - **A check after every step.** Any piece that crosses another, touches
+      it, or comes within $r_{\min}/4$ of a strand that has folded back, is
+      put back where it was before the step, both ends, and checked again.
+      The line was clean before the step, so this always ends.
+    - **Careful removals.** Removing a point (section 5) cuts a corner; if
+      the shortcut would pass across another strand, the point stays.
+
+    The forces keep the check rare; the check makes crossing impossible. The
+    tests grow lines and count crossings on every final curve. On the line
+    you grew above:
+    """)
+    return
+
+
+@app.cell
+def _(demo_g, demo_snaps, mo):
+    _P = demo_snaps[-1]
+    _bad = crossings(_P, demo_g.gap * demo_g.r_min, demo_g.r_min)
+    mo.md(
+        f"**{len(_bad)}** crossings or near-touches among **{len(_P):,}** pieces, "
+        f"line length **{curve_length(_P):,.0f} px** on a {demo_g.width} px square."
+    )
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""
+    ## 7. From paint to spacing
+
+    So far $r$ was one number. Now it changes from place to place, and it is
+    read off a picture. Each point of the picture gets a brightness $T$
+    between 0 (its darkest tone) and 1 (its lightest), and the strands there
+    are asked to sit $r$ pixels apart:
+
+    $$r(\mathbf x) = r_{\min} + (r_{\max} - r_{\min})\,T(\mathbf x)^{\gamma}$$
+
+    Dark means $r_{\min}$, tight; light means $r_{\max}$, open. The exponent
+    $\gamma$ bends the curve in between: above 1, more of the picture stays
+    dense.
+
+    A pen of fixed width can only reach about half black, where strands run
+    side by side. So the lights do the talking: the wider $r_{\max}$, the
+    more the face stands out. Before the curve, two touches. A blur of about
+    $r_{\min}$, so the line follows tone and not the cracks in the varnish;
+    and local contrast, which pushes every tone away from the average of its
+    surroundings, so an eye stays darker than the lit cheek around it.
+
+    The sliders under *Tune the tone*, at the top, move exactly these knobs.
+    """)
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""
+    ## 8. What differs from the paper
+
+    Pedersen and Singh give every length in units of a base distance and a
+    field read from the image. The method here is theirs; these are the
+    changes, each made because the original came apart at these sizes.
+
+    - **Lengths in units of the local spacing $r$.** Push and pull cancel at
+      $r$, the cutoff is $2r$, points sit $0.4\,r$ apart, but never more than
+      $0.8\,r_{\min}$, so the open loops in the lights are drawn as curves
+      and not as polygons.
+    - **One scale per pair.** Two pieces of line use the smaller of their two
+      spacings. With each point's own, where dark meets light the two sides
+      want different distances, the pushes are not mutual, and dark strands
+      creep into the light like the teeth of a comb.
+    - **Only folded parts interact** and **the push has a ceiling** (section 4).
+    - **Short steps and a check** (section 6): the paper does not promise a
+      line that never crosses; this one does.
+    - **Smoothing at drawing time only:** ten passes that move each point
+      halfway to its neighbours' midpoint, then the check again. It removes
+      the point-to-point wobble the trembling leaves and keeps the folds,
+      which are many points wide. The growth itself keeps its tremble: that
+      is what makes it grow.
+
+    What it is not: a pen of fixed width never reaches solid black, so the
+    contrast comes from opening the lights, not from filling the darks.
+    """)
+    return
+
+
+# --- the algorithm and the drawing: importable functions --------------
+# (at the end so the notebook opens on the pictures; marimo runs cells by
+# what they use, not by where they sit)
+
+
 @app.class_definition
 @dataclass(frozen=True)
 class Growth:
@@ -1018,573 +1590,6 @@ def ink_cmap(pal):
     from matplotlib.colors import LinearSegmentedColormap
 
     return LinearSegmentedColormap.from_list("ink", [pal["bg"], pal["ink"]])
-
-
-@app.cell
-def _():
-    import marimo as mo
-    import matplotlib.pyplot as plt
-
-    return mo, plt
-
-
-@app.cell
-def _(mo):
-    # the palette follows the page's theme; on the dark one the ink is light,
-    # so the line must be dense where the picture is LIGHT (Growth.night)
-    PAL = NIGHT if mo.app_meta().theme == "dark" else PAPER
-    night = PAL is NIGHT
-
-    def public_src(name):
-        """A file of public/ for mo.image: a path here, a URL in the browser."""
-        loc = mo.notebook_location() / "public" / name
-        return loc if isinstance(loc, Path) and loc.exists() else str(loc)
-
-    return PAL, night, public_src
-
-
-@app.cell
-def _(mo, public_src):
-    mo.md(rf"""
-    # Unbroken Line
-
-    ### a painting drawn by one line that grows and never crosses itself
-
-    {mo.image(public_src("growth.gif"), width=360, style={"margin": "0 auto"})}
-
-    Take a small ring of thread and let it grow. Every point on it trembles
-    a little, is pulled smooth by its two neighbours, and is pushed away from
-    any other part of the thread that comes too close. The ring gets longer,
-    buckles, folds into a labyrinth and fills the page. It never crosses
-    itself.
-
-    Now read "too close" off a painting: a couple of pixels in the shadows,
-    more in the lights. The thread packs tight where the painting is dark and
-    stays loose where it is bright, and the picture appears in the gaps. From
-    start to finish it is still one closed line.
-
-    $$r(\mathbf x) = r_{{\min}} + (r_{{\max}} - r_{{\min}})\,T(\mathbf x)^{{\gamma}}$$
-
-    The method is the labyrinth growth of H. Pedersen and K. Singh,
-    [*Organic Labyrinths and Mazes*](https://www.dgp.toronto.edu/~karan/artexhibit/mazes.pdf)
-    (NPAR 2006). Try it first: pick a painting and watch it grow. Then the
-    sections below take the method apart one idea at a time. No maths needed
-    beyond "push" and "pull".
-    """)
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md(r"""
-    ## Try it
-
-    Pick a painting, or drop in your own picture. Three of them were grown
-    in advance, on a map 600 pixels wide and in the palette they were made
-    for: drag the slider and watch the line fill the frame.
-    """)
-    return
-
-
-@app.cell
-def _(mo):
-    catalog = load_catalog()
-    art = mo.ui.dropdown(
-        options={a["title"]: s for s, a in catalog.items()},
-        value=next(iter(catalog.values()))["title"],
-        label="painting",
-    )
-    upload = mo.ui.file(filetypes=["image/*"], label="or your own picture")
-    mo.hstack([art, upload], justify="start")
-    return art, catalog, upload
-
-
-@app.cell
-def _(art, catalog, upload):
-    # the picture, its credit line, and the start of the ring
-    if upload.value:
-        grey = load_grey(upload.contents())
-        entry = {"title": upload.name(), "start": [0.5, 0.5]}
-        credit = upload.name()
-    else:
-        entry = catalog[art.value]
-        grey = load_image(art.value)
-        credit = f"**{entry['title']}**, {entry['artist']}, {entry['year']}, {entry['where']}"
-    return credit, entry, grey
-
-
-@app.cell
-def _(art, upload):
-    # grown in advance by figures.py; None for your own picture
-    ready = None if upload.value else load_growth(f"growth/{art.value}.npz")
-    return (ready,)
-
-
-@app.cell
-def _(mo, ready):
-    if ready:
-        stage = mo.ui.slider(0, len(ready[0]) - 1, value=len(ready[0]) // 2, label="growth",
-                             full_width=True)
-        _out = stage
-    else:
-        stage = None
-        _out = mo.md("_Nothing grown in advance for this picture: grow it yourself below._")
-    _out
-    return (stage,)
-
-
-@app.cell
-def _(mo, plt, ready, stage):
-    mo.stop(ready is None)
-    _curves, _shape, _g = ready
-    _pal = NIGHT if _g.night else PAPER
-    _P = _curves[stage.value]  # already smoothed for drawing (polish)
-    _fig = plt.figure(figsize=(5.4, 5.4 * _shape[0] / _shape[1]), facecolor=_pal["bg"])
-    draw(_fig.add_axes([0, 0, 1, 1]), _P, _shape, _pal, width=INK * _g.r_min)
-    mo.vstack([
-        _fig,
-        mo.md(f"{len(_P):,} points · line {curve_length(_P):,.0f} px long "
-              f"on a {_shape[1]} px map"),
-    ], align="center")
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md(r"""
-    ### Tune the tone
-
-    How close the strands may sit is read off the picture: tight in the
-    darks, loose in the lights (section 7 tells how). Move the sliders and
-    the map changes; the circle is where the ring starts.
-    """)
-    return
-
-
-@app.cell
-def _(entry, mo):
-    _g = params(entry)
-    r_min = mo.ui.slider(1.0, 6.0, step=0.1, value=_g.r_min, label="r min", show_value=True)
-    r_max = mo.ui.slider(4.0, 24.0, step=0.5, value=_g.r_max, label="r max", show_value=True)
-    gamma = mo.ui.slider(0.5, 4.0, step=0.1, value=_g.gamma, label="gamma", show_value=True)
-    local = mo.ui.slider(0.0, 2.0, step=0.1, value=_g.local, label="local contrast", show_value=True)
-    blur = mo.ui.slider(0.0, 3.0, step=0.25, value=_g.blur, label="blur", show_value=True)
-    start_x = mo.ui.slider(0.0, 1.0, step=0.01, value=entry["start"][0], label="start x", show_value=True)
-    start_y = mo.ui.slider(0.0, 1.0, step=0.01, value=entry["start"][1], label="start y", show_value=True)
-    mo.vstack([mo.hstack([r_min, r_max, gamma]), mo.hstack([local, blur]), mo.hstack([start_x, start_y])])
-    return blur, gamma, local, r_max, r_min, start_x, start_y
-
-
-@app.cell
-def _(blur, entry, gamma, grey, local, night, r_max, r_min, width):
-    g = params(
-        entry, width=width.value, r_min=r_min.value, r_max=r_max.value, gamma=gamma.value,
-        local=local.value, blur=blur.value, night=night,
-    )
-    R = spacing_field(grey, g)
-    return R, g
-
-
-@app.cell
-def _(PAL, R, credit, g, grey, mo, night, plt, start_x, start_y):
-    _fig, _ax = plt.subplots(1, 3, figsize=(10, 4.4), facecolor=PAL["bg"])
-    _cmap = ink_cmap(PAL)
-    # every panel as ink coverage, so all three read the same way
-    _ax[0].imshow(grey if night else 1 - grey, cmap=_cmap, vmin=0, vmax=1)
-    _ax[1].imshow((g.r_max - R) / (g.r_max - g.r_min), cmap=_cmap, vmin=0, vmax=1)
-    # the tone the line will make: pen width over strand spacing
-    _ax[2].imshow(np.clip(INK * g.r_min / (PACKING * R), 0, 1), cmap=_cmap, vmin=0, vmax=1)
-    _h, _w = grey.shape
-    _ax[0].plot(start_x.value * _w, start_y.value * _h, "o", ms=7, mfc="none", mec=PAL["ink"], mew=1.2)
-    for _a, _t in zip(_ax, ["picture", "spacing r(x): dark = tight", "the tone the line will make"]):
-        _a.set_title(_t, color=PAL["ink"], fontsize=9)
-        _a.axis("off")
-    _fig.tight_layout()
-    mo.vstack([mo.md(credit + "  · the circle is where the ring starts"), _fig])
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md(r"""
-    ### Grow it yourself
-
-    The map above, with your sliders, grown here and now. The width is the
-    size of the map in pixels: the bigger, the finer the line and the longer
-    the wait. On a laptop 350 takes under a minute and 600 a few minutes.
-    """)
-    return
-
-
-@app.cell
-def _(mo):
-    width = mo.ui.slider(100, 1200, step=25, value=350, label="width", show_value=True)
-    steps = mo.ui.slider(500, 10000, step=500, value=6000, label="at most steps", show_value=True)
-    run = mo.ui.run_button(label="grow")
-    # In the browser (Pyodide) there are no compiled kernels and one core:
-    # a whole picture would take the best part of an hour, so growing is
-    # left to the notebook run on a computer.
-    if HAVE_NUMBA:
-        _out = mo.hstack([width, steps, run], justify="start")
-    else:
-        _out = mo.callout(mo.md(
-            "This page runs in your browser, without the compiled code that makes the "
-            "growth fast, so growing a whole picture here would take the best part of "
-            "an hour. Run the notebook on your computer to grow your own: "
-            "`uv run marimo edit unbroken_line.py` in a copy of the "
-            "[repository](https://github.com/monex00/unbroken-line)."), kind="info")
-    _out
-    return run, steps, width
-
-
-@app.cell
-def _(R, g, mo, run, start_x, start_y, steps):
-    mo.stop(not HAVE_NUMBA)
-    mo.stop(not run.value, mo.md("Press **grow**."))
-    with mo.status.progress_bar(total=steps.value, title="growing", remove_on_exit=True) as _bar:
-        snaps = grow(R, g, steps.value, every=50, center=(start_x.value, start_y.value),
-                     on_step=lambda s, P: _bar.update())
-    return (snaps,)
-
-
-@app.cell
-def _(mo, snaps):
-    frame = mo.ui.slider(0, len(snaps) - 1, value=len(snaps) - 1, label="snapshot", show_value=True)
-    frame
-    return (frame,)
-
-
-@app.cell
-def _(PAL, R, frame, g, mo, plt, snaps):
-    _P = snaps[frame.value]
-    _fig = plt.figure(figsize=(5, 5 * R.shape[0] / R.shape[1]), facecolor=PAL["bg"])
-    draw(_fig.add_axes([0, 0, 1, 1]), polish(_P, g), R.shape, PAL, width=INK * g.r_min)
-    mo.vstack([
-        _fig,
-        mo.md(f"{len(_P):,} points · line {curve_length(_P):,.0f} px long on a {g.width} px map"),
-    ])
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md(r"""
-    ## How it works
-
-    Seven ideas, one at a time, most with a slider of their own: a line,
-    three nudges that make it grow, a rule that keeps it from crossing, and
-    a painting that tells it where to pack tight.
-    """)
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md(r"""
-    ## 1. One line
-
-    The line is nothing but a list of points, $\mathbf p_0, \mathbf p_1,
-    \dots, \mathbf p_{n-1}$, each joined to the next by a straight piece and
-    the last joined back to the first. It is drawn with a pen of one fixed
-    width, in one colour, with no shading. Every grey you will see comes from
-    one thing: how close together its strands run.
-
-    It starts as a small ring of 20 points. Then, over and over, every point
-    takes a step made of three small nudges,
-
-    $$\mathbf p_i \;\leftarrow\; \mathbf p_i + \mathbf B_i + \mathbf F_i + \mathbf A_i$$
-
-    and the line is tidied up: points are added where it has stretched,
-    removed where they bunch up. The next four sections take the three
-    nudges and the tidying one at a time.
-    """)
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md(r"""
-    ## 2. Tremble
-
-    The first nudge is pure chance. Every point is kicked a short distance in
-    a random direction:
-
-    $$\mathbf B_i = f_B\, D\, \mathbf z_i, \qquad \mathbf z_i \sim \mathcal N(0, 1)$$
-
-    $D$ is the distance between neighbouring points, so the kick is a small
-    fraction $f_B$ of it (0.1 here). This is the engine. A thread that
-    wobbles is longer than a straight one, and in section 5 that extra length
-    turns into new points. With $f_B = 0$ the ring stays a ring.
-    """)
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md(r"""
-    ## 3. Smooth
-
-    The second nudge pulls every point a little way towards the midpoint of
-    its two neighbours:
-
-    $$\mathbf F_i = f_F \left( \tfrac12\,(\mathbf p_{i-1} + \mathbf p_{i+1}) - \mathbf p_i \right)$$
-
-    On its own this would shrink the ring to a dot. Against the trembling it
-    irons out the jitter and keeps the line a curve instead of a scribble. A
-    larger $f_F$ gives smooth, wide meanders; a smaller one a frayed line
-    that grows like coral.
-
-    Where the spacing changes along the line, the midpoint is weighted by the
-    spacing at each neighbour, $(\mathbf p_{i-1} r_{i+1} + \mathbf p_{i+1}
-    r_{i-1}) / (r_{i-1} + r_{i+1})$, so that points do not slide towards the
-    open, light parts of the picture.
-    """)
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md(r"""
-    ## 4. Keep your distance
-
-    The third nudge is what makes a labyrinth. Every stretch of the line is
-    pushed away by any other stretch closer than a distance $r$, and pulled,
-    gently, by one a little further off. How hard depends only on the
-    distance $d$ counted in units of $r$, $\rho = d / r$:
-
-    $$w(\rho) = \rho^{-12} - \rho^{-6}$$
-
-    This is the Lennard-Jones curve, the textbook rule for two atoms: a steep
-    wall of push below $\rho = 1$, a shallow dip of pull beyond it, nothing
-    past $\rho = 2$. At $\rho = 1$ push and pull cancel, so two strands side
-    by side settle exactly $r$ apart. Remember that $r$: in section 7 it
-    becomes the brush.
-
-    The distance is measured from a point to the nearest spot on each piece
-    of the line, not to the other points, so a strand feels its neighbour as
-    a smooth wall rather than a row of beads. Two changes to the textbook
-    curve. Closer than $\rho = 0.85$ the push stops growing: the true curve
-    shoots up so fast that a step overshoots and the points rattle. And a
-    point feels only the parts of the line that have folded back towards it
-    (closer in space than 0.9 times their distance along the line), never
-    the stretch it sits on, or a straight line would push on itself.
-    """)
-    return
-
-
-@app.cell
-def _(mo):
-    lj_floor = mo.ui.slider(0.6, 1.0, step=0.01, value=Growth.lj_floor, label="push stops growing at",
-                            show_value=True)
-    lj_floor
-    return (lj_floor,)
-
-
-@app.cell
-def _(PAL, lj_floor, plt):
-    _g = replace(Growth(), lj_floor=lj_floor.value)
-    _rho = np.linspace(0.5, 2.2, 600)
-    _fig, _ax = plt.subplots(figsize=(6.4, 2.8), facecolor=PAL["bg"])
-    _ax.set_facecolor(PAL["bg"])
-    _pure = _rho**-12 - _rho**-6
-    _ax.plot(_rho, _pure, color=PAL["ink"], lw=1, ls=(0, (2, 3)), alpha=0.6)
-    _w = np.where(_rho < _g.cutoff, lennard_jones(_rho, _g), 0.0)
-    _ax.plot(_rho, _w, color=PAL["ink"], lw=1.8)
-    _ax.axhline(0, color=PAL["ink"], lw=0.6, alpha=0.5)
-    _ax.axvline(1, color=PAL["ink"], lw=0.6, alpha=0.3)
-    _ax.set_ylim(-0.4, 2.0)
-    _ax.set_xlim(0.5, 2.2)
-    _ax.text(0.62, 1.75, "push", color=PAL["ink"], fontsize=9)
-    _ax.text(1.35, -0.32, "pull", color=PAL["ink"], fontsize=9)
-    _ax.text(1.02, 1.75, "ρ = 1: strands settle here", color=PAL["ink"], fontsize=8, alpha=0.8)
-    _ax.set_xlabel("ρ = distance / r", color=PAL["ink"], fontsize=9)
-    _ax.tick_params(colors=PAL["ink"], labelsize=8)
-    for _s in ("top", "right"):
-        _ax.spines[_s].set_visible(False)
-    for _s in ("left", "bottom"):
-        _ax.spines[_s].set_color(PAL["ink"])
-    _fig.tight_layout()
-    _fig
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md(r"""
-    ## 5. Split and merge
-
-    Points are kept about $D = 0.4\,r$ apart. After every step a piece longer
-    than $1.2\,D$ is cut in two at its middle, and a point closer than
-    $0.2\,D$ to its neighbour is removed.
-
-    Now the loop closes. Trembling makes the line longer; the long pieces
-    split; every new point pushes on its neighbours; the line has nowhere to
-    go but sideways, so it buckles and folds, and each fold is held $r$ from
-    the next by the push and pull of section 4. When the frame is full there
-    is nothing left to buckle into: the count of points stops climbing and
-    the growth stops by itself.
-
-    ### Try it: a ring on blank paper
-
-    The same spacing everywhere, $r = 3$ pixels, on a small square. Change
-    the three nudges and grow: no trembling, no growth; little smoothing, a
-    ragged coral; strong push and pull, a tidy maze.
-    """)
-    return
-
-
-@app.cell
-def _(mo):
-    demo_fb = mo.ui.slider(0.0, 0.3, step=0.01, value=Growth.f_b, label="tremble  f_B", show_value=True)
-    demo_ff = mo.ui.slider(0.01, 0.4, step=0.01, value=Growth.f_f, label="smooth  f_F", show_value=True)
-    demo_fa = mo.ui.slider(0.005, 0.08, step=0.005, value=Growth.f_a, label="push-pull  f_A",
-                           show_value=True)
-    demo_size = mo.ui.slider(50, 160, step=10, value=100 if HAVE_NUMBA else 70, label="square, px",
-                             show_value=True)
-    demo_run = mo.ui.run_button(label="grow")
-    mo.vstack([mo.hstack([demo_fb, demo_ff, demo_fa]), mo.hstack([demo_size, demo_run], justify="start")])
-    return demo_fa, demo_fb, demo_ff, demo_run, demo_size
-
-
-@app.cell
-def _(demo_fa, demo_fb, demo_ff, demo_run, demo_size, mo):
-    mo.stop(not demo_run.value, mo.md("Press **grow**."
-                                      + ("" if HAVE_NUMBA else " In the browser this takes a minute.")))
-    demo_g = Growth(width=demo_size.value, r_min=3.0, r_max=3.0, f_b=demo_fb.value, f_f=demo_ff.value,
-                    f_a=demo_fa.value, max_nodes=60_000)
-    demo_R = np.full((demo_size.value, demo_size.value), 3.0)
-    demo_log = []
-    with mo.status.progress_bar(total=4000, title="growing", remove_on_exit=True) as _bar:
-        demo_snaps = grow(demo_R, demo_g, 4000, every=20, log=demo_log, on_step=lambda s, P: _bar.update())
-    return demo_R, demo_g, demo_log, demo_snaps
-
-
-@app.cell
-def _(demo_snaps, mo):
-    demo_frame = mo.ui.slider(0, len(demo_snaps) - 1, value=len(demo_snaps) - 1, label="snapshot",
-                              show_value=True)
-    demo_frame
-    return (demo_frame,)
-
-
-@app.cell
-def _(PAL, demo_R, demo_frame, demo_g, demo_log, demo_snaps, plt):
-    _P = demo_snaps[demo_frame.value]
-    _fig = plt.figure(figsize=(8.4, 4.0), facecolor=PAL["bg"])
-    _ax = _fig.add_axes([0.0, 0.0, 0.48, 1.0])
-    draw(_ax, polish(_P, demo_g), demo_R.shape, PAL, width=INK * demo_g.r_min)
-    _ax2 = _fig.add_axes([0.58, 0.16, 0.4, 0.74])
-    _s, _n = np.array(demo_log).T
-    _ax2.plot(_s, _n, color=PAL["ink"], lw=1.4)
-    _ax2.axvline(min(demo_frame.value * 20, _s[-1]), color=PAL["ink"], lw=0.6, alpha=0.4)
-    _ax2.set_facecolor(PAL["bg"])
-    _ax2.set_xlabel("step", color=PAL["ink"], fontsize=9)
-    _ax2.set_title("points on the line", color=PAL["ink"], fontsize=9, loc="left")
-    _ax2.tick_params(colors=PAL["ink"], labelsize=8)
-    for _k in ("top", "right"):
-        _ax2.spines[_k].set_visible(False)
-    for _k in ("left", "bottom"):
-        _ax2.spines[_k].set_color(PAL["ink"])
-    _fig
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md(r"""
-    ## 6. Never crossing
-
-    The promise in the title is the one thing the original method does not
-    make: the short-range push keeps strands apart nearly always, not always.
-    Here it is kept by construction, three ways.
-
-    - **Short steps.** No point moves further than $r/4$ in one step, nor
-      further than half its shorter neighbouring piece. Deep in a fold a
-      point can feel a dozen walls at once; without the cap it sums all their
-      pushes, jumps over its own neighbours and ties a knot.
-    - **A check after every step.** Any piece that crosses another, touches
-      it, or comes within $r_{\min}/4$ of a strand that has folded back, is
-      put back where it was before the step, both ends, and checked again.
-      The line was clean before the step, so this always ends.
-    - **Careful removals.** Removing a point (section 5) cuts a corner; if
-      the shortcut would pass across another strand, the point stays.
-
-    The forces keep the check rare; the check makes crossing impossible. The
-    tests grow lines and count crossings on every final curve. On the line
-    you grew above:
-    """)
-    return
-
-
-@app.cell
-def _(demo_g, demo_snaps, mo):
-    _P = demo_snaps[-1]
-    _bad = crossings(_P, demo_g.gap * demo_g.r_min, demo_g.r_min)
-    mo.md(
-        f"**{len(_bad)}** crossings or near-touches among **{len(_P):,}** pieces, "
-        f"line length **{curve_length(_P):,.0f} px** on a {demo_g.width} px square."
-    )
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md(r"""
-    ## 7. From paint to spacing
-
-    So far $r$ was one number. Now it changes from place to place, and it is
-    read off a picture. Each point of the picture gets a brightness $T$
-    between 0 (its darkest tone) and 1 (its lightest), and the strands there
-    are asked to sit $r$ pixels apart:
-
-    $$r(\mathbf x) = r_{\min} + (r_{\max} - r_{\min})\,T(\mathbf x)^{\gamma}$$
-
-    Dark means $r_{\min}$, tight; light means $r_{\max}$, open. The exponent
-    $\gamma$ bends the curve in between: above 1, more of the picture stays
-    dense.
-
-    A pen of fixed width can only reach about half black, where strands run
-    side by side. So the lights do the talking: the wider $r_{\max}$, the
-    more the face stands out. Before the curve, two touches. A blur of about
-    $r_{\min}$, so the line follows tone and not the cracks in the varnish;
-    and local contrast, which pushes every tone away from the average of its
-    surroundings, so an eye stays darker than the lit cheek around it.
-
-    The sliders under *Tune the tone*, at the top, move exactly these knobs.
-    """)
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md(r"""
-    ## 8. What differs from the paper
-
-    Pedersen and Singh give every length in units of a base distance and a
-    field read from the image. The method here is theirs; these are the
-    changes, each made because the original came apart at these sizes.
-
-    - **Lengths in units of the local spacing $r$.** Push and pull cancel at
-      $r$, the cutoff is $2r$, points sit $0.4\,r$ apart, but never more than
-      $0.8\,r_{\min}$, so the open loops in the lights are drawn as curves
-      and not as polygons.
-    - **One scale per pair.** Two pieces of line use the smaller of their two
-      spacings. With each point's own, where dark meets light the two sides
-      want different distances, the pushes are not mutual, and dark strands
-      creep into the light like the teeth of a comb.
-    - **Only folded parts interact** and **the push has a ceiling** (section 4).
-    - **Short steps and a check** (section 6): the paper does not promise a
-      line that never crosses; this one does.
-    - **Smoothing at drawing time only:** ten passes that move each point
-      halfway to its neighbours' midpoint, then the check again. It removes
-      the point-to-point wobble the trembling leaves and keeps the folds,
-      which are many points wide. The growth itself keeps its tremble: that
-      is what makes it grow.
-
-    What it is not: a pen of fixed width never reaches solid black, so the
-    contrast comes from opening the lights, not from filling the darks.
-    """)
-    return
 
 
 if __name__ == "__main__":
